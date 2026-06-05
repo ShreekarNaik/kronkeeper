@@ -245,9 +245,10 @@ Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 ## Project layout
 
 ```
-├── src/              # Application source
+├── src/              # Application source (see CONTRIBUTORS.md for module map)
 ├── migrations/       # SQLx migrations (run on startup)
 ├── scripts/          # Example scripts + API smoke tests
+├── CONTRIBUTORS.md   # Layout conventions and growth rules
 ├── docker-compose.yml
 ├── Dockerfile
 └── .env.example

@@ -1,5 +1,3 @@
-pub mod heap;
-
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,7 +9,7 @@ use tracing::{error, info, warn};
 
 use crate::config::Config;
 use crate::db::JobRepository;
-use crate::metrics::{self, record_job_dispatched, set_scheduler_heap_size};
+use crate::metrics::{record_job_dispatched, set_scheduler_heap_size};
 use crate::models::{build_heap, Job, ScheduledJob};
 
 pub struct Scheduler {
