@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# SQLx offline data (optional; not used in this repo)
+sqlx-data.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / local tooling
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
