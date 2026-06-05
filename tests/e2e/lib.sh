@@ -62,6 +62,79 @@ assert_http_status() {
   fi
 }
 
+# Parse a scalar Prometheus sample (e.g. jobs_completed_total 3).
+metric_value() {
+  local name="$1"
+  local metrics="$2"
+  echo "$metrics" | awk -v m="$name" '
+    $0 !~ /^#/ && $1 == m { print $2; found = 1; exit }
+    END { if (!found) print "" }
+  '
+}
+
+assert_metric_gte() {
+  local name="$1"
+  local metrics="$2"
+  local minimum="$3"
+  local value
+  value=$(metric_value "$name" "$metrics")
+  if [[ -z "$value" ]]; then
+    echo "ASSERT FAILED: metric $name not found in /metrics output" >&2
+    return 1
+  fi
+  if ! awk -v v="$value" -v m="$minimum" 'BEGIN { exit (v + 0 >= m + 0) ? 0 : 1 }'; then
+    echo "ASSERT FAILED: $name=$value expected >= $minimum" >&2
+    return 1
+  fi
+}
+
+assert_metric_increased() {
+  local name="$1"
+  local before_metrics="$2"
+  local after_metrics="$3"
+  local before after
+  before=$(metric_value "$name" "$before_metrics")
+  before=${before:-0}
+  after=$(metric_value "$name" "$after_metrics")
+  if [[ -z "$after" ]]; then
+    echo "ASSERT FAILED: metric $name missing after job run" >&2
+    return 1
+  fi
+  if ! awk -v b="$before" -v a="$after" 'BEGIN { exit (a + 0 > b + 0) ? 0 : 1 }'; then
+    echo "ASSERT FAILED: $name did not increase (before=$before after=$after)" >&2
+    return 1
+  fi
+}
+
+wait_for_metrics_ready() {
+  local deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    local metrics
+    metrics=$(fetch_metrics)
+    if echo "$metrics" | grep -q "scheduler_heap_size"; then
+      echo "$metrics"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for Prometheus metrics to become ready" >&2
+  return 1
+}
+
+fetch_metrics() {
+  curl -sf "$BASE_URL/metrics" -H "X-API-Key: $API_KEY"
+}
+
+assert_metrics_has_type() {
+  local name="$1"
+  local kind="$2"
+  local metrics="$3"
+  echo "$metrics" | grep -q "TYPE ${name} ${kind}" || {
+    echo "ASSERT FAILED: expected TYPE ${name} ${kind} in /metrics" >&2
+    return 1
+  }
+}
+
 run_test() {
   local name="$1"
   shift

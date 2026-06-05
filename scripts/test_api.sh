@@ -28,6 +28,6 @@ echo "== Get job =="
 curl -sf "$BASE_URL/api/v1/jobs/$JOB_ID" -H "X-API-Key: $API_KEY" | jq .
 
 echo "== Metrics (sample) =="
-curl -sf "$BASE_URL/metrics" | head -20
+curl -sf "$BASE_URL/metrics" -H "X-API-Key: $API_KEY" | head -20
 
 echo "All API smoke tests passed."

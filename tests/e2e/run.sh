@@ -14,31 +14,82 @@ test_health() {
 }
 
 test_metrics() {
-  local metrics deadline=$((SECONDS + 30))
-  while (( SECONDS < deadline )); do
-    metrics=$(curl -sf "$BASE_URL/metrics")
-    if echo "$metrics" | grep -q "scheduler_heap_size"; then
-      echo "$metrics" | grep -q "HELP" || {
-        echo "expected Prometheus HELP lines in metrics" >&2
-        return 1
-      }
-      return 0
-    fi
-    sleep 1
-  done
-  echo "expected scheduler_heap_size in metrics after startup" >&2
-  return 1
+  local headers metrics before after key schedule resp job_id status
+
+  status=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/metrics")
+  assert_http_status "401" "$status" "metrics without API key"
+
+  headers=$(curl -s -D - -o /dev/null "$BASE_URL/metrics" -H "X-API-Key: $API_KEY")
+  echo "$headers" | grep -qi "HTTP/.* 200" || {
+    echo "GET /metrics should return 200 with a valid API key" >&2
+    return 1
+  }
+  echo "$headers" | grep -qi "content-type:.*text/plain" || {
+    echo "GET /metrics should return text/plain Prometheus exposition format" >&2
+    return 1
+  }
+
+  metrics=$(wait_for_metrics_ready)
+  assert_metrics_has_type "scheduler_heap_size" "gauge" "$metrics"
+  assert_metric_gte "scheduler_heap_size" "$metrics" 0
+
+  before="$metrics"
+
+  key=$(unique_key)
+  schedule=$(iso_in_seconds 12)
+  resp=$(create_job_expect_status 201 "$(cat <<EOF
+{
+  "idempotency_key": "$key",
+  "payload": {
+    "type": "script",
+    "path": "hello.sh",
+    "timeout_sec": 30
+  },
+  "scheduled_at": "$schedule"
+}
+EOF
+)")
+  job_id=$(echo "$resp" | jq -r .id)
+  wait_for_job_state "$job_id" "COMPLETED" 90
+
+  after=$(fetch_metrics)
+
+  assert_metrics_has_type "jobs_scheduled_total" "counter" "$after"
+  assert_metrics_has_type "jobs_dispatched_total" "counter" "$after"
+  assert_metrics_has_type "jobs_completed_total" "counter" "$after"
+  assert_metrics_has_type "job_execution_duration_seconds" "histogram" "$after"
+  assert_metric_increased "jobs_scheduled_total" "$before" "$after"
+  assert_metric_increased "jobs_dispatched_total" "$before" "$after"
+  assert_metric_increased "jobs_completed_total" "$before" "$after"
+  assert_metric_gte "job_execution_duration_seconds_count" "$after" 1
+
+  local active
+  active=$(metric_value "worker_active_count" "$after")
+  if [[ -n "$active" ]]; then
+    assert_eq "$active" "0" "worker_active_count after job completes"
+  fi
+
+  echo "Metrics snapshot after job run:"
+  echo "$after" | grep -E '^(jobs_|scheduler_|worker_|job_execution_duration_seconds_)' || true
 }
 
 test_auth() {
   local status
   status=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/jobs")
-  assert_http_status "401" "$status" "missing API key"
+  assert_http_status "401" "$status" "missing API key on jobs"
+
+  status=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/metrics")
+  assert_http_status "401" "$status" "missing API key on metrics"
 
   status=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "X-API-Key: not-a-real-key" \
     "$BASE_URL/api/v1/jobs")
-  assert_http_status "401" "$status" "invalid API key"
+  assert_http_status "401" "$status" "invalid API key on jobs"
+
+  status=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "X-API-Key: not-a-real-key" \
+    "$BASE_URL/metrics")
+  assert_http_status "401" "$status" "invalid API key on metrics"
 }
 
 test_script_job_completes() {
@@ -282,7 +333,7 @@ main() {
   start_stack
 
   run_test "health endpoint" test_health
-  run_test "prometheus metrics" test_metrics
+  run_test "prometheus metrics endpoint" test_metrics
   run_test "API key authentication" test_auth
   run_test "scheduled script job completes" test_script_job_completes
   run_test "scheduled HTTP job completes" test_http_job_completes

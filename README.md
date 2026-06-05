@@ -27,7 +27,7 @@ docker compose up --build -d
 The API listens on `http://localhost:8080`. A development API key is seeded by migration `003_seed_dev_client.sql`:
 
 | Field   | Value                              |
-|---------|------------------------------------|
+| ------- | ---------------------------------- |
 | API key | `dev-api-key-change-in-production` |
 
 Change this before deploying to production.
@@ -80,18 +80,18 @@ The E2E suite spins up an isolated stack (PostgreSQL, kronkeeper, and a webhook/
 
 The runner builds images, waits for the API to become healthy, runs ten scenario tests, then tears the stack down. Set `KEEP_E2E_STACK=1` to leave containers running for debugging.
 
-| Test | What it verifies |
-|------|------------------|
-| Health endpoint | Database and scheduler are up |
-| Prometheus metrics | Instrumentation is exposed |
-| API key authentication | Missing/invalid keys return 401 |
-| Scheduled script job | `hello.sh` runs and reaches `COMPLETED` |
-| Scheduled HTTP job | Outbound GET to internal echo server succeeds |
-| Webhook delivery | Completion callback is POSTed to webhook receiver |
-| Idempotency | Duplicate `idempotency_key` returns HTTP 200 with same job id |
-| Cancel scheduled job | `DELETE` moves a future job to `CANCELLED` |
-| Failed job dead letter | `fail.sh` with `max_retries: 0` reaches `DEAD_LETTER` |
-| Recurring job lifecycle | Create instance + template, patch cron, cancel template |
+| Test                        | What it verifies                                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Health endpoint             | Database and scheduler are up                                                                             |
+| Prometheus metrics endpoint | Protected `/metrics` (401 without key), Prometheus types, counters/histogram update after a job completes |
+| API key authentication      | Missing/invalid keys return 401                                                                           |
+| Scheduled script job        | `hello.sh` runs and reaches `COMPLETED`                                                                   |
+| Scheduled HTTP job          | Outbound GET to internal echo server succeeds                                                             |
+| Webhook delivery            | Completion callback is POSTed to webhook receiver                                                         |
+| Idempotency                 | Duplicate `idempotency_key` returns HTTP 200 with same job id                                             |
+| Cancel scheduled job        | `DELETE` moves a future job to `CANCELLED`                                                                |
+| Failed job dead letter      | `fail.sh` with `max_retries: 0` reaches `DEAD_LETTER`                                                     |
+| Recurring job lifecycle     | Create instance + template, patch cron, cancel template                                                   |
 
 Unit tests (retry backoff, cron parsing, script path sandboxing) run via `cargo test` and do not require Docker.
 
@@ -99,21 +99,21 @@ Unit tests (retry backoff, cron parsing, script path sandboxing) run via `cargo 
 
 All settings are loaded from environment variables. See [`.env.example`](.env.example) for the full list.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | *(required)* | PostgreSQL connection string |
-| `API_LISTEN_ADDR` | `0.0.0.0:8080` | HTTP bind address |
-| `WORKER_COUNT` | `10` | Number of concurrent workers |
-| `WORKER_QUEUE_SIZE` | `1000` | Max jobs buffered in the worker queue |
-| `HEAP_LOOKAHEAD_LIMIT` | `10000` | Max scheduled jobs loaded into the scheduler heap |
-| `LEASE_DURATION_SECS` | `30` | How long a leased job is reserved before reaping |
-| `LEASE_REAPER_INTERVAL_SECS` | `10` | Interval for reclaiming expired leases |
-| `MAX_RETRY_BACKOFF_SECS` | `3600` | Cap on exponential retry delay |
-| `WEBHOOK_TIMEOUT_SECS` | `5` | Per-request webhook timeout |
-| `WEBHOOK_MAX_RETRIES` | `3` | Webhook delivery attempts |
-| `SCRIPT_SAFE_DIR` | `/opt/daemon/scripts` | Directory allowed for script execution |
-| `SHUTDOWN_TIMEOUT_SECS` | `30` | Grace period for in-flight jobs on shutdown |
-| `RUST_LOG` | `info` | Log filter (`tracing` / `env-filter` syntax) |
+| Variable                     | Default               | Description                                       |
+| ---------------------------- | --------------------- | ------------------------------------------------- |
+| `DATABASE_URL`               | _(required)_          | PostgreSQL connection string                      |
+| `API_LISTEN_ADDR`            | `0.0.0.0:8080`        | HTTP bind address                                 |
+| `WORKER_COUNT`               | `10`                  | Number of concurrent workers                      |
+| `WORKER_QUEUE_SIZE`          | `1000`                | Max jobs buffered in the worker queue             |
+| `HEAP_LOOKAHEAD_LIMIT`       | `10000`               | Max scheduled jobs loaded into the scheduler heap |
+| `LEASE_DURATION_SECS`        | `30`                  | How long a leased job is reserved before reaping  |
+| `LEASE_REAPER_INTERVAL_SECS` | `10`                  | Interval for reclaiming expired leases            |
+| `MAX_RETRY_BACKOFF_SECS`     | `3600`                | Cap on exponential retry delay                    |
+| `WEBHOOK_TIMEOUT_SECS`       | `5`                   | Per-request webhook timeout                       |
+| `WEBHOOK_MAX_RETRIES`        | `3`                   | Webhook delivery attempts                         |
+| `SCRIPT_SAFE_DIR`            | `/opt/daemon/scripts` | Directory allowed for script execution            |
+| `SHUTDOWN_TIMEOUT_SECS`      | `30`                  | Grace period for in-flight jobs on shutdown       |
+| `RUST_LOG`                   | `info`                | Log filter (`tracing` / `env-filter` syntax)      |
 
 ## Authentication
 
@@ -134,21 +134,21 @@ Base URL: `http://localhost:8080`
 
 ### Public endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Liveness — checks database and scheduler |
-| `GET` | `/metrics` | Prometheus metrics |
+| Method | Path      | Description                              |
+| ------ | --------- | ---------------------------------------- |
+| `GET`  | `/health` | Liveness — checks database and scheduler |
 
 ### Protected endpoints
 
 All require `X-API-Key`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/jobs` | Create a one-off or recurring job |
-| `GET` | `/api/v1/jobs/{id}` | Get job status |
-| `DELETE` | `/api/v1/jobs/{id}` | Cancel a scheduled job (or recurring template) |
-| `PATCH` | `/api/v1/jobs/{id}` | Update the cron expression on a recurring template |
+| Method   | Path                | Description                                        |
+| -------- | ------------------- | -------------------------------------------------- |
+| `GET`    | `/metrics`          | Prometheus metrics                                 |
+| `POST`   | `/api/v1/jobs`      | Create a one-off or recurring job                  |
+| `GET`    | `/api/v1/jobs/{id}` | Get job status                                     |
+| `DELETE` | `/api/v1/jobs/{id}` | Cancel a scheduled job (or recurring template)     |
+| `PATCH`  | `/api/v1/jobs/{id}` | Update the cron expression on a recurring template |
 
 ### Create a one-off HTTP job
 
@@ -269,7 +269,16 @@ curl http://localhost:8080/health
 
 Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 
-## Project layout
+## Metrics
+
+`GET /metrics` requires the same `X-API-Key` header as job endpoints:
+
+```bash
+curl http://localhost:8080/metrics \
+  -H "X-API-Key: dev-api-key-change-in-production"
+```
+
+When configuring Prometheus, set a scrape `authorization` header or use a relabel/proxy that injects `X-API-Key`.
 
 ```
 ├── src/                    # Application source (see CONTRIBUTING.md for module map)
@@ -281,10 +290,6 @@ Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 ├── Dockerfile
 └── .env.example
 ```
-
-## License
-
-Not specified — add a `LICENSE` file if you plan to distribute this project.
 
 ---
 
@@ -316,40 +321,40 @@ kronkeeper is a **single-binary daemon** that accepts jobs over HTTP, persists t
 
 ### Components
 
-| Component | Source | Responsibility |
-|-----------|--------|----------------|
-| **API** | `src/api/` | Axum REST interface — job CRUD, health, metrics. API-key middleware on protected routes. |
-| **Database** | `src/db/` | SQLx repository — job persistence, leasing, retries, recurring templates/instances. |
-| **Models** | `src/models/` | Domain types — job states, payloads, cron/recurrence config, API request/response shapes. |
-| **Scheduler** | `src/scheduler.rs` | Event-driven loop — loads upcoming jobs into a heap, leases due jobs, dispatches to workers. |
-| **Worker pool** | `src/worker/` | Bounded `mpsc` queue of concurrent executors. Runs HTTP or script payloads with timeouts. |
-| **Recurring** | `src/recurring.rs` | Cron templates — spawns child instances after each successful run; supports concurrency policies. |
-| **Reaper** | `src/reaper.rs` | Reclaims expired leases and expired TTL jobs; runs on startup and on an interval. |
-| **Webhook** | `src/webhook.rs` | Async completion callbacks — POSTs job + event JSON with retries. |
-| **Metrics** | `src/metrics.rs` | Prometheus counters/gauges — jobs scheduled/completed/failed, worker depth, webhooks, recurring count. |
-| **Config** | `src/config.rs` | Environment-driven settings (workers, leases, backoff, script directory, etc.). |
+| Component       | Source             | Responsibility                                                                                         |
+| --------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| **API**         | `src/api/`         | Axum REST interface — job CRUD, health, metrics. API-key middleware on protected routes.               |
+| **Database**    | `src/db/`          | SQLx repository — job persistence, leasing, retries, recurring templates/instances.                    |
+| **Models**      | `src/models/`      | Domain types — job states, payloads, cron/recurrence config, API request/response shapes.              |
+| **Scheduler**   | `src/scheduler.rs` | Event-driven loop — loads upcoming jobs into a heap, leases due jobs, dispatches to workers.           |
+| **Worker pool** | `src/worker/`      | Bounded `mpsc` queue of concurrent executors. Runs HTTP or script payloads with timeouts.              |
+| **Recurring**   | `src/recurring.rs` | Cron templates — spawns child instances after each successful run; supports concurrency policies.      |
+| **Reaper**      | `src/reaper.rs`    | Reclaims expired leases and expired TTL jobs; runs on startup and on an interval.                      |
+| **Webhook**     | `src/webhook.rs`   | Async completion callbacks — POSTs job + event JSON with retries.                                      |
+| **Metrics**     | `src/metrics.rs`   | Prometheus counters/gauges — jobs scheduled/completed/failed, worker depth, webhooks, recurring count. |
+| **Config**      | `src/config.rs`    | Environment-driven settings (workers, leases, backoff, script directory, etc.).                        |
 
 ### Feature reference
 
-| Feature | Description | API / config |
-|---------|-------------|--------------|
-| **One-off jobs** | Run once at `scheduled_at`. | `POST /api/v1/jobs` without `recurrence`. |
-| **HTTP execution** | Outbound request with method, URL, headers, body, timeout. | `payload.type = "http"`. |
-| **Script execution** | Run a script from `SCRIPT_SAFE_DIR` only (path traversal blocked). | `payload.type = "script"`. |
-| **Scheduling** | Jobs wait in `SCHEDULED` until deadline; scheduler leases and dispatches. | `scheduled_at` (RFC 3339 UTC). |
-| **Leases** | Prevents double execution after crashes. Expired leases are reaped. | `LEASE_DURATION_SECS`, `LEASE_REAPER_INTERVAL_SECS`. |
-| **Retries** | Failed jobs reschedule with exponential backoff capped by `MAX_RETRY_BACKOFF_SECS`. | `max_retries`, `retry_delay_sec`. |
-| **TTL / expiry** | Jobs past `expires_at` move to `EXPIRED` instead of retrying. | `expires_at` on create. |
-| **Dead letter** | Jobs that exhaust retries land in `DEAD_LETTER`. | Automatic when `attempt_count > max_retries`. |
-| **Idempotency** | Same `idempotency_key` returns the existing job (HTTP 200). | Unique per job across the system. |
-| **Cancellation** | Only `SCHEDULED` jobs cancel; recurring templates cancel pending instances too. | `DELETE /api/v1/jobs/{id}`. |
-| **Recurring jobs** | Cron template spawns instances; patch cron on template. | `recurrence.cron_expr`, `PATCH` on template id. |
-| **Concurrency policies** | `queue_once`, `skip`, or `allow` overlapping instances. | `recurrence.concurrency_policy`. |
-| **Webhooks** | Terminal-state POST with job snapshot and event name. | `webhook_url` on create. |
-| **Authentication** | `X-API-Key` header; keys loaded from `clients` table at startup. | Migration seed or manual `INSERT`. |
-| **Health** | Checks DB ping and scheduler heartbeat. | `GET /health` → 200 or 503. |
-| **Metrics** | Prometheus text exposition. | `GET /metrics`. |
-| **Graceful shutdown** | Waits up to `SHUTDOWN_TIMEOUT_SECS` for in-flight jobs. | SIGINT / SIGTERM. |
+| Feature                  | Description                                                                         | API / config                                         |
+| ------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **One-off jobs**         | Run once at `scheduled_at`.                                                         | `POST /api/v1/jobs` without `recurrence`.            |
+| **HTTP execution**       | Outbound request with method, URL, headers, body, timeout.                          | `payload.type = "http"`.                             |
+| **Script execution**     | Run a script from `SCRIPT_SAFE_DIR` only (path traversal blocked).                  | `payload.type = "script"`.                           |
+| **Scheduling**           | Jobs wait in `SCHEDULED` until deadline; scheduler leases and dispatches.           | `scheduled_at` (RFC 3339 UTC).                       |
+| **Leases**               | Prevents double execution after crashes. Expired leases are reaped.                 | `LEASE_DURATION_SECS`, `LEASE_REAPER_INTERVAL_SECS`. |
+| **Retries**              | Failed jobs reschedule with exponential backoff capped by `MAX_RETRY_BACKOFF_SECS`. | `max_retries`, `retry_delay_sec`.                    |
+| **TTL / expiry**         | Jobs past `expires_at` move to `EXPIRED` instead of retrying.                       | `expires_at` on create.                              |
+| **Dead letter**          | Jobs that exhaust retries land in `DEAD_LETTER`.                                    | Automatic when `attempt_count > max_retries`.        |
+| **Idempotency**          | Same `idempotency_key` returns the existing job (HTTP 200).                         | Unique per job across the system.                    |
+| **Cancellation**         | Only `SCHEDULED` jobs cancel; recurring templates cancel pending instances too.     | `DELETE /api/v1/jobs/{id}`.                          |
+| **Recurring jobs**       | Cron template spawns instances; patch cron on template.                             | `recurrence.cron_expr`, `PATCH` on template id.      |
+| **Concurrency policies** | `queue_once`, `skip`, or `allow` overlapping instances.                             | `recurrence.concurrency_policy`.                     |
+| **Webhooks**             | Terminal-state POST with job snapshot and event name.                               | `webhook_url` on create.                             |
+| **Authentication**       | `X-API-Key` header; keys loaded from `clients` table at startup.                    | Migration seed or manual `INSERT`.                   |
+| **Health**               | Checks DB ping and scheduler heartbeat.                                             | `GET /health` → 200 or 503.                          |
+| **Metrics**              | Prometheus text exposition (requires API key).                                      | `GET /metrics` with `X-API-Key`.                     |
+| **Graceful shutdown**    | Waits up to `SHUTDOWN_TIMEOUT_SECS` for in-flight jobs.                             | SIGINT / SIGTERM.                                    |
 
 ### Job state machine
 
@@ -373,11 +378,11 @@ Indexes optimize queries for scheduled jobs, leased jobs, and client scoping.
 
 ### Testing strategy
 
-| Layer | Command | Scope |
-|-------|---------|-------|
-| **Unit** | `cargo test` | Retry backoff math, scheduler heap ordering, cron next-fire, script sandbox paths. |
-| **Smoke** | `./scripts/test_api.sh` | Quick API check against a running instance (create + get job, health, metrics). |
-| **E2E** | `./tests/e2e/run.sh` | Full Docker stack — real scheduling delay, execution, webhooks, auth, recurring, failure paths. |
+| Layer     | Command                 | Scope                                                                                           |
+| --------- | ----------------------- | ----------------------------------------------------------------------------------------------- |
+| **Unit**  | `cargo test`            | Retry backoff math, scheduler heap ordering, cron next-fire, script sandbox paths.              |
+| **Smoke** | `./scripts/test_api.sh` | Quick API check against a running instance (create + get job, health, metrics).                 |
+| **E2E**   | `./tests/e2e/run.sh`    | Full Docker stack — real scheduling delay, execution, webhooks, auth, recurring, failure paths. |
 
 E2E stack files live under `tests/e2e/`:
 
@@ -386,4 +391,3 @@ E2E stack files live under `tests/e2e/`:
 - `lib.sh` / `run.sh` — helpers and test scenarios
 
 For deeper design rationale and schema details, see [`.cursor/blueprint.md`](.cursor/blueprint.md) (internal architecture blueprint).
-
