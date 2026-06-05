@@ -28,12 +28,12 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/jobs/{id}", get(get_job))
         .route("/api/v1/jobs/{id}", delete(cancel_job))
         .route("/api/v1/jobs/{id}", patch(patch_job))
+        .route("/metrics", get(metrics))
         .layer(middleware::from_fn_with_state(state.auth.clone(), require_api_key))
         .with_state(state.clone());
 
     let public = Router::new()
         .route("/health", get(health))
-        .route("/metrics", get(metrics))
         .with_state(state);
 
     Router::new()
