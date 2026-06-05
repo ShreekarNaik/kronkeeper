@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kronkeeper
+      POSTGRES_PASSWORD: kronkeeper
+      POSTGRES_DB: kronkeeper
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kronkeeper -d kronkeeper"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  webhook-receiver:
+    build: ./webhook-receiver
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  kronkeeper:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://kronkeeper:kronkeeper@postgres:5432/kronkeeper
+      API_LISTEN_ADDR: 0.0.0.0:8080
+      WORKER_COUNT: 4
+      WORKER_QUEUE_SIZE: 100
+      HEAP_LOOKAHEAD_LIMIT: 1000
+      LEASE_DURATION_SECS: 30
+      LEASE_REAPER_INTERVAL_SECS: 5
+      MAX_RETRY_BACKOFF_SECS: 3600
+      WEBHOOK_TIMEOUT_SECS: 5
+      WEBHOOK_MAX_RETRIES: 3
+      SCRIPT_SAFE_DIR: /opt/daemon/scripts
+      RUST_LOG: info
+    volumes:
+      - ../../scripts:/opt/daemon/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webhook-receiver:
+        condition: service_healthy

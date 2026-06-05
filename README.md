@@ -36,7 +36,7 @@ Change this before deploying to production.
 
 ### Prerequisites
 
-- Rust 1.85+ (see `Dockerfile`)
+- Rust 1.88+ (see `Dockerfile`)
 - PostgreSQL 16+
 
 ### 1. Start PostgreSQL
@@ -67,6 +67,33 @@ Migrations in `migrations/` run automatically on startup.
 ```bash
 ./scripts/test_api.sh
 ```
+
+### 5. End-to-end tests (Docker)
+
+The E2E suite spins up an isolated stack (PostgreSQL, kronkeeper, and a webhook/HTTP target), schedules real jobs ~12 seconds in the future, and verifies execution end-to-end.
+
+**Prerequisites:** Docker, Docker Compose, `curl`, and `jq`.
+
+```bash
+./tests/e2e/run.sh
+```
+
+The runner builds images, waits for the API to become healthy, runs ten scenario tests, then tears the stack down. Set `KEEP_E2E_STACK=1` to leave containers running for debugging.
+
+| Test | What it verifies |
+|------|------------------|
+| Health endpoint | Database and scheduler are up |
+| Prometheus metrics | Instrumentation is exposed |
+| API key authentication | Missing/invalid keys return 401 |
+| Scheduled script job | `hello.sh` runs and reaches `COMPLETED` |
+| Scheduled HTTP job | Outbound GET to internal echo server succeeds |
+| Webhook delivery | Completion callback is POSTed to webhook receiver |
+| Idempotency | Duplicate `idempotency_key` returns HTTP 200 with same job id |
+| Cancel scheduled job | `DELETE` moves a future job to `CANCELLED` |
+| Failed job dead letter | `fail.sh` with `max_retries: 0` reaches `DEAD_LETTER` |
+| Recurring job lifecycle | Create instance + template, patch cron, cancel template |
+
+Unit tests (retry backoff, cron parsing, script path sandboxing) run via `cargo test` and do not require Docker.
 
 ## Configuration
 
@@ -245,10 +272,11 @@ Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 ## Project layout
 
 ```
-├── src/              # Application source (see CONTRIBUTORS.md for module map)
-├── migrations/       # SQLx migrations (run on startup)
-├── scripts/          # Example scripts + API smoke tests
-├── CONTRIBUTORS.md   # Layout conventions and growth rules
+├── src/                    # Application source (see CONTRIBUTING.md for module map)
+├── migrations/             # SQLx migrations (run on startup)
+├── scripts/                # Example scripts, API smoke tests
+├── tests/e2e/              # Docker-based end-to-end test suite
+├── CONTRIBUTING.md         # Layout conventions and growth rules
 ├── docker-compose.yml
 ├── Dockerfile
 └── .env.example
@@ -257,3 +285,105 @@ Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 ## License
 
 Not specified — add a `LICENSE` file if you plan to distribute this project.
+
+---
+
+## Documentation
+
+### Architecture overview
+
+kronkeeper is a **single-binary daemon** that accepts jobs over HTTP, persists them in PostgreSQL, and executes them through a bounded Tokio worker pool. The scheduler uses an in-memory min-heap backed by the database — it sleeps until the next deadline and wakes when the schedule changes (new job, cancel, retry, etc.).
+
+```
+┌─────────────┐     POST /jobs      ┌──────────────────────────────────────────┐
+│   Client    │ ──────────────────► │              kronkeeper                  │
+│  (service)  │ ◄── webhook POST ── │  API ─► DB ◄── Scheduler ─► Worker pool  │
+└─────────────┘                     │                    │              │       │
+                                    │                    └── Reaper       │       │
+                                    │                    └── Recurring ◄──┘       │
+                                    └──────────────────────────────────────────┘
+                                                      │
+                                                      ▼
+                                               PostgreSQL
+```
+
+**Startup sequence**
+
+1. Load config from environment; connect to PostgreSQL and run migrations.
+2. Recover orphaned `LEASED` / `RUNNING` jobs from a prior crash (reaper).
+3. Spawn the scheduler loop, lease reaper, worker pool, and HTTP server.
+4. On shutdown (SIGINT/SIGTERM), stop accepting work, drain in-flight jobs, then exit.
+
+### Components
+
+| Component | Source | Responsibility |
+|-----------|--------|----------------|
+| **API** | `src/api/` | Axum REST interface — job CRUD, health, metrics. API-key middleware on protected routes. |
+| **Database** | `src/db/` | SQLx repository — job persistence, leasing, retries, recurring templates/instances. |
+| **Models** | `src/models/` | Domain types — job states, payloads, cron/recurrence config, API request/response shapes. |
+| **Scheduler** | `src/scheduler.rs` | Event-driven loop — loads upcoming jobs into a heap, leases due jobs, dispatches to workers. |
+| **Worker pool** | `src/worker/` | Bounded `mpsc` queue of concurrent executors. Runs HTTP or script payloads with timeouts. |
+| **Recurring** | `src/recurring.rs` | Cron templates — spawns child instances after each successful run; supports concurrency policies. |
+| **Reaper** | `src/reaper.rs` | Reclaims expired leases and expired TTL jobs; runs on startup and on an interval. |
+| **Webhook** | `src/webhook.rs` | Async completion callbacks — POSTs job + event JSON with retries. |
+| **Metrics** | `src/metrics.rs` | Prometheus counters/gauges — jobs scheduled/completed/failed, worker depth, webhooks, recurring count. |
+| **Config** | `src/config.rs` | Environment-driven settings (workers, leases, backoff, script directory, etc.). |
+
+### Feature reference
+
+| Feature | Description | API / config |
+|---------|-------------|--------------|
+| **One-off jobs** | Run once at `scheduled_at`. | `POST /api/v1/jobs` without `recurrence`. |
+| **HTTP execution** | Outbound request with method, URL, headers, body, timeout. | `payload.type = "http"`. |
+| **Script execution** | Run a script from `SCRIPT_SAFE_DIR` only (path traversal blocked). | `payload.type = "script"`. |
+| **Scheduling** | Jobs wait in `SCHEDULED` until deadline; scheduler leases and dispatches. | `scheduled_at` (RFC 3339 UTC). |
+| **Leases** | Prevents double execution after crashes. Expired leases are reaped. | `LEASE_DURATION_SECS`, `LEASE_REAPER_INTERVAL_SECS`. |
+| **Retries** | Failed jobs reschedule with exponential backoff capped by `MAX_RETRY_BACKOFF_SECS`. | `max_retries`, `retry_delay_sec`. |
+| **TTL / expiry** | Jobs past `expires_at` move to `EXPIRED` instead of retrying. | `expires_at` on create. |
+| **Dead letter** | Jobs that exhaust retries land in `DEAD_LETTER`. | Automatic when `attempt_count > max_retries`. |
+| **Idempotency** | Same `idempotency_key` returns the existing job (HTTP 200). | Unique per job across the system. |
+| **Cancellation** | Only `SCHEDULED` jobs cancel; recurring templates cancel pending instances too. | `DELETE /api/v1/jobs/{id}`. |
+| **Recurring jobs** | Cron template spawns instances; patch cron on template. | `recurrence.cron_expr`, `PATCH` on template id. |
+| **Concurrency policies** | `queue_once`, `skip`, or `allow` overlapping instances. | `recurrence.concurrency_policy`. |
+| **Webhooks** | Terminal-state POST with job snapshot and event name. | `webhook_url` on create. |
+| **Authentication** | `X-API-Key` header; keys loaded from `clients` table at startup. | Migration seed or manual `INSERT`. |
+| **Health** | Checks DB ping and scheduler heartbeat. | `GET /health` → 200 or 503. |
+| **Metrics** | Prometheus text exposition. | `GET /metrics`. |
+| **Graceful shutdown** | Waits up to `SHUTDOWN_TIMEOUT_SECS` for in-flight jobs. | SIGINT / SIGTERM. |
+
+### Job state machine
+
+```
+SCHEDULED ──► LEASED ──► RUNNING ──► COMPLETED
+    │             │           │
+    │             │           └──► FAILED ──► SCHEDULED (retry)
+    │             │                      └──► DEAD_LETTER / EXPIRED
+    │             └──► SCHEDULED (lease reaper)
+    └──► CANCELLED
+```
+
+Terminal states: `COMPLETED`, `FAILED`, `EXPIRED`, `CANCELLED`, `DEAD_LETTER`.
+
+### Data model (PostgreSQL)
+
+- **`clients`** — API keys for authentication.
+- **`jobs`** — All job rows including recurring templates (`is_template = true`) and spawned instances (`parent_job_id` points to template). Payload stored as JSONB; state, scheduling, retry, and webhook columns track lifecycle.
+
+Indexes optimize queries for scheduled jobs, leased jobs, and client scoping.
+
+### Testing strategy
+
+| Layer | Command | Scope |
+|-------|---------|-------|
+| **Unit** | `cargo test` | Retry backoff math, scheduler heap ordering, cron next-fire, script sandbox paths. |
+| **Smoke** | `./scripts/test_api.sh` | Quick API check against a running instance (create + get job, health, metrics). |
+| **E2E** | `./tests/e2e/run.sh` | Full Docker stack — real scheduling delay, execution, webhooks, auth, recurring, failure paths. |
+
+E2E stack files live under `tests/e2e/`:
+
+- `docker-compose.e2e.yml` — postgres + kronkeeper + webhook-receiver
+- `webhook-receiver/` — lightweight Python server used as HTTP job target and webhook capture
+- `lib.sh` / `run.sh` — helpers and test scenarios
+
+For deeper design rationale and schema details, see [`.cursor/blueprint.md`](.cursor/blueprint.md) (internal architecture blueprint).
+
