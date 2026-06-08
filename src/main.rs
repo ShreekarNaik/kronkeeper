@@ -99,8 +99,8 @@ async fn main() -> Result<()> {
         scheduler_alive,
     });
 
-    let listener = tokio::net::TcpListener::bind(config.api_listen_addr).await?;
-    info!(addr = %config.api_listen_addr, "kronkeeper listening");
+    let (listener, listen_addr) = config::bind_api_listener(config.api_listen_addr).await?;
+    info!(addr = %listen_addr, "kronkeeper listening");
 
     let shutdown_timeout = config.shutdown_timeout;
     axum::serve(listener, router)

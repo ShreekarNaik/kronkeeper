@@ -1,9 +1,14 @@
 use std::env;
+use std::io;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use tokio::net::TcpListener;
+use tracing::warn;
+
+pub const DEFAULT_API_PORT: u16 = 2401;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -27,7 +32,7 @@ impl Config {
             env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
 
         let api_listen_addr: SocketAddr = env::var("API_LISTEN_ADDR")
-            .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
+            .unwrap_or_else(|_| format!("0.0.0.0:{DEFAULT_API_PORT}"))
             .parse()
             .context("invalid API_LISTEN_ADDR")?;
 
@@ -50,6 +55,36 @@ impl Config {
             ),
             shutdown_timeout: Duration::from_secs(parse_u64("SHUTDOWN_TIMEOUT_SECS", 30)?),
         })
+    }
+}
+
+/// Binds the configured address, incrementing the port until one is available.
+pub async fn bind_api_listener(requested: SocketAddr) -> Result<(TcpListener, SocketAddr)> {
+    let ip = requested.ip();
+    let start_port = requested.port();
+    let mut port = start_port;
+
+    loop {
+        let addr = SocketAddr::new(ip, port);
+        match TcpListener::bind(addr).await {
+            Ok(listener) => {
+                if port != start_port {
+                    warn!(
+                        requested = %requested,
+                        bound = %addr,
+                        "configured port unavailable, using next available port"
+                    );
+                }
+                return Ok((listener, addr));
+            }
+            Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
+                if port == u16::MAX {
+                    bail!("no available port found starting from {start_port}");
+                }
+                port += 1;
+            }
+            Err(e) => return Err(e.into()),
+        }
     }
 }
 

@@ -18,10 +18,10 @@ services:
   kronkeeper:
     build: .
     ports:
-      - "8080:8080"
+      - "2401:2401"
     environment:
       DATABASE_URL: postgres://kronkeeper:kronkeeper@postgres:5432/kronkeeper
-      API_LISTEN_ADDR: 0.0.0.0:8080
+      API_LISTEN_ADDR: 0.0.0.0:2401
       WORKER_COUNT: 10
       WORKER_QUEUE_SIZE: 1000
       HEAP_LOOKAHEAD_LIMIT: 10000

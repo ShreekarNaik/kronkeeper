@@ -18,5 +18,5 @@ WORKDIR /app
 COPY --from=builder /app/target/release/kronkeeper /usr/local/bin/kronkeeper
 COPY migrations ./migrations
 
-EXPOSE 8080
+EXPOSE 2401
 CMD ["kronkeeper"]

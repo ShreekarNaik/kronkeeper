@@ -7,7 +7,7 @@ E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
 COMPOSE_FILE="$E2E_DIR/docker-compose.e2e.yml"
 
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-http://localhost:2401}"
 WEBHOOK_RECEIVER_URL="${WEBHOOK_RECEIVER_URL:-http://localhost:9090}"
 API_KEY="${API_KEY:-dev-api-key-change-in-production}"
 

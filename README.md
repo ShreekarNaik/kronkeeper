@@ -24,7 +24,7 @@ docker compose up --build -d
 ./scripts/test_api.sh
 ```
 
-The API listens on `http://localhost:8080`. A development API key is seeded by migration `003_seed_dev_client.sql`:
+The API listens on `http://localhost:2401` (if that port is busy, kronkeeper tries the next port until one is free). A development API key is seeded by migration `003_seed_dev_client.sql`:
 
 | Field   | Value                              |
 | ------- | ---------------------------------- |
@@ -102,7 +102,7 @@ All settings are loaded from environment variables. See [`.env.example`](.env.ex
 | Variable                     | Default               | Description                                       |
 | ---------------------------- | --------------------- | ------------------------------------------------- |
 | `DATABASE_URL`               | _(required)_          | PostgreSQL connection string                      |
-| `API_LISTEN_ADDR`            | `0.0.0.0:8080`        | HTTP bind address                                 |
+| `API_LISTEN_ADDR`            | `0.0.0.0:2401`        | HTTP bind address (increments port if unavailable) |
 | `WORKER_COUNT`               | `10`                  | Number of concurrent workers                      |
 | `WORKER_QUEUE_SIZE`          | `1000`                | Max jobs buffered in the worker queue             |
 | `HEAP_LOOKAHEAD_LIMIT`       | `10000`               | Max scheduled jobs loaded into the scheduler heap |
@@ -130,7 +130,7 @@ Restart kronkeeper (or redeploy) so the new key is picked up.
 
 ## API reference
 
-Base URL: `http://localhost:8080`
+Base URL: `http://localhost:2401`
 
 ### Public endpoints
 
@@ -153,7 +153,7 @@ All require `X-API-Key`.
 ### Create a one-off HTTP job
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST http://localhost:2401/api/v1/jobs \
   -H "X-API-Key: dev-api-key-change-in-production" \
   -H "Content-Type: application/json" \
   -d '{
@@ -179,7 +179,7 @@ Re-submitting the same `idempotency_key` returns the existing job (HTTP 200) ins
 ### Create a recurring job
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST http://localhost:2401/api/v1/jobs \
   -H "X-API-Key: dev-api-key-change-in-production" \
   -H "Content-Type: application/json" \
   -d '{
@@ -207,7 +207,7 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 Place executable scripts under `SCRIPT_SAFE_DIR`. With Docker Compose, the `scripts/` directory is mounted read-only at `/opt/daemon/scripts`.
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST http://localhost:2401/api/v1/jobs \
   -H "X-API-Key: dev-api-key-change-in-production" \
   -H "Content-Type: application/json" \
   -d '{
@@ -224,14 +224,14 @@ curl -X POST http://localhost:8080/api/v1/jobs \
 ### Get job status
 
 ```bash
-curl http://localhost:8080/api/v1/jobs/<job-id> \
+curl http://localhost:2401/api/v1/jobs/<job-id> \
   -H "X-API-Key: dev-api-key-change-in-production"
 ```
 
 ### Cancel a job
 
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/jobs/<job-id> \
+curl -X DELETE http://localhost:2401/api/v1/jobs/<job-id> \
   -H "X-API-Key: dev-api-key-change-in-production"
 ```
 
@@ -264,7 +264,7 @@ Delivery is retried up to `WEBHOOK_MAX_RETRIES` times.
 ## Health check
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:2401/health
 ```
 
 Returns `200` when both the database and scheduler are healthy; `503` otherwise.
@@ -274,7 +274,7 @@ Returns `200` when both the database and scheduler are healthy; `503` otherwise.
 `GET /metrics` requires the same `X-API-Key` header as job endpoints:
 
 ```bash
-curl http://localhost:8080/metrics \
+curl http://localhost:2401/metrics \
   -H "X-API-Key: dev-api-key-change-in-production"
 ```
 
