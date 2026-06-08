@@ -32,6 +32,36 @@ The API listens on `http://localhost:2401` (if that port is busy, kronkeeper tri
 
 Change this before deploying to production.
 
+## Ship a deploy package (no source required)
+
+To distribute kronkeeper as a self-contained bundle — Docker image + Compose stack, without the Rust codebase — build a release archive from this repo:
+
+```bash
+./scripts/package-release.sh
+```
+
+This produces `dist/kronkeeper-<version>.tar.gz` containing:
+
+| File | Purpose |
+| ---- | ------- |
+| `docker-compose.yml` | Starts PostgreSQL + kronkeeper (pre-built image, no `build:` step) |
+| `kronkeeper-image.tar` | Saved Docker image — loaded automatically by `up.sh` |
+| `.env.example` | Configuration template (image tag, ports, worker settings) |
+| `scripts/` | Mount point for job scripts |
+| `up.sh` | One-command setup: load image → `docker compose up -d` |
+
+**Recipients** only need Docker:
+
+```bash
+tar -xzf kronkeeper-0.1.0.tar.gz
+cd kronkeeper-0.1.0
+./up.sh
+```
+
+See [`deploy/README.md`](deploy/README.md) for operations, configuration, and registry-based deployment (skip the tarball when pulling from GHCR or another registry).
+
+The `deploy/` directory in this repo is the template copied into each release package. Developers still use the root `docker-compose.yml` with `build: .` for local iteration.
+
 ## Local development
 
 ### Prerequisites

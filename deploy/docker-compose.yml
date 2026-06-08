@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kronkeeper}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kronkeeper}
+      POSTGRES_DB: ${POSTGRES_DB:-kronkeeper}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-kronkeeper} -d ${POSTGRES_DB:-kronkeeper}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kronkeeper:
+    image: ${KRONKEEPER_IMAGE:-kronkeeper:latest}
+    ports:
+      - "${API_PORT:-2401}:2401"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-kronkeeper}:${POSTGRES_PASSWORD:-kronkeeper}@postgres:5432/${POSTGRES_DB:-kronkeeper}
+      API_LISTEN_ADDR: 0.0.0.0:2401
+    volumes:
+      - ./scripts:/opt/daemon/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

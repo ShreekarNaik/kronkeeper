@@ -1,6 +1,9 @@
 # Rust build artifacts
 /target/
 
+# Release packages
+/dist/
+
 # Environment & secrets
 .env
 .env.*
